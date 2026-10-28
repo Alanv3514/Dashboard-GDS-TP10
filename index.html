@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Indicadores — Sistema de Control de Stock</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0f12;
+    --card: #16191f;
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #f5f3e7;
+    --muted: #9aa3ad;
+    --accent: #3ecf8e;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --track: rgba(255, 255, 255, 0.08);
+    --chart-grid: rgba(255, 255, 255, 0.08);
+    --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    --pill-bg-soft: rgba(251, 191, 36, 0.14);
+  }
+
+  [data-theme="light"] {
+    --bg: #faf9f5;
+    --card: #ffffff;
+    --border: rgba(23, 32, 38, 0.10);
+    --text: #1f2b33;
+    --muted: #5c6b76;
+    --accent: #38bdf8;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --track: rgba(23, 32, 38, 0.07);
+    --chart-grid: rgba(23, 32, 38, 0.10);
+    --shadow: 0 4px 16px rgba(31, 43, 51, 0.10);
+    --pill-bg-soft: rgba(251, 191, 36, 0.20);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 40px; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+
+  h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em; }
+  .subtitle { color: var(--muted); font-size: 0.92rem; margin-top: 4px; }
+
+  .theme-btn {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .theme-btn:hover { border-color: var(--accent); }
+  .theme-btn .icon { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 22px 18px;
+    box-shadow: var(--shadow);
+    transition: background 0.25s ease, transform 0.15s ease, box-shadow 0.25s ease;
+  }
+  .card:hover { transform: translateY(-2px); }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .kpi-name { font-size: 1rem; font-weight: 650; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .pill.amber { background: rgba(251, 191, 36, 0.14); color: var(--amber); }
+  .pill.amber .dot { background: var(--amber); }
+  .pill.green { background: rgba(52, 211, 153, 0.14); color: var(--green); }
+  .pill.green .dot { background: var(--green); }
+
+  .kpi-meta { color: var(--muted); font-size: 0.82rem; margin-bottom: 12px; }
+  .kpi-meta strong { color: var(--text); font-weight: 600; }
+
+  .viz { position: relative; height: 230px; }
+
+  .center-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .center-label .big { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  .center-label .small { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+  .needle {
+    position: absolute;
+    left: 50%;
+    bottom: 12%;
+    width: 2px;
+    height: 62px;
+    background: var(--text);
+    border-radius: 2px;
+    transform-origin: bottom center;
+    transform: rotate(79.2deg); /* 94 % sobre la escala semicircular (0-100) */
+    pointer-events: none;
+    opacity: 0.85;
+  }
+  .needle::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -5px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text);
+    transform: translateX(-50%);
+  }
+
+  footer {
+    margin-top: 30px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-align: center;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Dashboard de Indicadores — Sistema de Control de Stock</h1>
+      <div class="subtitle">Proyecto de software · Datos simulados con fines académicos</div>
+    </div>
+    <button id="themeBtn" class="theme-btn" type="button" aria-label="Cambiar tema">
+      <span class="icon" aria-hidden="true"></span><span id="themeBtnLabel">Tema claro</span>
+    </button>
+  </header>
+
+  <main class="grid">
+
+    <!-- KPI 1: Cumplimiento del cronograma -->
+    <section class="card">
+      <div class="card-head">
+        <span class="kpi-name">Cumplimiento del cronograma</span>
+        <span class="pill amber"><span class="dot"></span>En riesgo leve</span>
+      </div>
+      <div class="kpi-meta">Eje: Tiempo · Hitos entregados a tiempo: <strong>75%</strong> · Objetivo: <strong>85%</strong></div>
+      <div class="viz">
+        <canvas id="chartCronograma"></canvas>
+        <div class="center-label"><span class="big">75%</span><span class="small">hitos a tiempo</span></div>
+      </div>
+    </section>
+
+    <!-- KPI 2: Velocidad del equipo -->
+    <section class="card">
+      <div class="card-head">
+        <span class="kpi-name">Velocidad del equipo</span>
+        <span class="pill green"><span class="dot"></span>En meta</span>
+      </div>
+      <div class="kpi-meta">Eje: Productividad · Promedio: <strong>31,5 SP</strong> por sprint · Objetivo: <strong>30 SP</strong></div>
+      <div class="viz"><canvas id="chartVelocidad"></canvas></div>
+    </section>
+
+    <!-- KPI 3: Precisión de inventario -->
+    <section class="card">
+      <div class="card-head">
+        <span class="kpi-name">Precisión de inventario</span>
+        <span class="pill green"><span class="dot"></span>Casi en meta</span>
+      </div>
+      <div class="kpi-meta">Eje: Calidad · Coincidencia sistema vs físico: <strong>94%</strong> · Objetivo: <strong>95%</strong></div>
+      <div class="viz">
+        <canvas id="chartPrecision"></canvas>
+        <div class="needle" aria-hidden="true"></div>
+        <div class="center-label" style="padding-top: 26px;"><span class="big">94%</span><span class="small">objetivo 95%</span></div>
+      </div>
+    </section>
+
+    <!-- KPI 4: Quiebres de stock -->
+    <section class="card">
+      <div class="card-head">
+        <span class="kpi-name">Quiebres de stock</span>
+        <span class="pill amber"><span class="dot"></span>Vigilar</span>
+      </div>
+      <div class="kpi-meta">Eje: Negocio · Mes actual (junio): <strong>3</strong> · Objetivo: <strong>≤ 3</strong> por mes</div>
+      <div class="viz"><canvas id="chartQuiebres"></canvas></div>
+    </section>
+
+  </main>
+
+  <footer>Actualizado: junio 2026 · Datos simulados · Equipo N — TP Gestión de Proyectos</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var root = document.documentElement;
+  var btn = document.getElementById("themeBtn");
+  var btnLabel = document.getElementById("themeBtnLabel");
+  var charts = [];
+
+  function applyButton(theme) {
+    btnLabel.textContent = theme === "dark" ? "Tema claro" : "Tema oscuro";
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(root).getPropertyValue(name).trim();
+  }
+
+  /* Gauge: aguja decorativa según valor */
+  function setNeedle() {
+    var needle = document.querySelector(".needle");
+    if (!needle) return;
+    var pct = 94; // valor actual del KPI Precisión de inventario
+    var angle = (pct / 100) * 180 - 90;
+    needle.style.transform = "rotate(" + angle + "deg)";
+  }
+
+  function palette() {
+    var amber = cssVar("--amber");
+    var green = cssVar("--green");
+    var red = cssVar("--red");
+    return {
+      accent: cssVar("--accent"),
+      text: cssVar("--text"),
+      muted: cssVar("--muted"),
+      track: cssVar("--track"),
+      grid: cssVar("--chart-grid"),
+      amber: amber,
+      green: green,
+      red: red
+    };
+  }
+
+  function destroyAll() {
+    while (charts.length) {
+      var c = charts.pop();
+      c.destroy();
+    }
+  }
+
+  function buildCharts() {
+    var p = palette();
+    destroyAll();
+
+    /* ---------- KPI 1: Cronograma — donut 75 % vs 25 % ---------- */
+    charts.push(new Chart(document.getElementById("chartCronograma"), {
+      type: "doughnut",
+      data: {
+        labels: ["Hitos a tiempo", "Hitos fuera de plazo"],
+        datasets: [{
+          data: [75, 25],
+          backgroundColor: [p.accent, p.track],
+          borderWidth: 0,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        cutout: "72%",
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } }
+      }
+    }));
+
+    /* ---------- KPI 2: Velocidad — líneas + objetivo punteado ---------- */
+    charts.push(new Chart(document.getElementById("chartVelocidad"), {
+      type: "line",
+      data: {
+        labels: ["Sprint 1", "Sprint 2", "Sprint 3", "Sprint 4"],
+        datasets: [
+          {
+            label: "Story points por sprint",
+            data: [32, 28, 35, 31],
+            borderColor: p.accent,
+            backgroundColor: p.accent,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            tension: 0.35,
+            fill: false
+          },
+          {
+            label: "Objetivo (30 SP)",
+            data: [30, 30, 30, 30],
+            borderColor: p.muted,
+            borderDash: [6, 6],
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: p.muted, boxWidth: 14, font: { size: 11 } } }
+        },
+        scales: {
+          x: { ticks: { color: p.muted }, grid: { color: p.grid } },
+          y: {
+            beginAtZero: false,
+            suggestedMin: 24,
+            suggestedMax: 38,
+            ticks: { color: p.muted },
+            grid: { color: p.grid }
+          }
+        }
+      }
+    }));
+
+    /* ---------- KPI 3: Precisión — gauge semicircular con zonas ---------- */
+    charts.push(new Chart(document.getElementById("chartPrecision"), {
+      type: "doughnut",
+      data: {
+        labels: ["Crítico (menos de 90%)", "Zona de atención (90–95%)", "Meta (95% o más)"],
+        datasets: [{
+          data: [90, 5, 5],
+          backgroundColor: [p.red, p.amber, p.green],
+          borderWidth: 0,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        rotation: -90,
+        circumference: 180,
+        cutout: "74%",
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true }
+        }
+      }
+    }));
+
+    /* ---------- KPI 4: Quiebres — barras por umbral + línea de objetivo ---------- */
+    var meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
+    var quiebres = [5, 4, 6, 3, 4, 3];
+    var colorBarras = quiebres.map(function (v) {
+      if (v > 3) return p.red;      // supera el objetivo
+      if (v === 3) return p.amber;  // en el límite
+      return p.green;               // bajo el objetivo
+    });
+
+    charts.push(new Chart(document.getElementById("chartQuiebres"), {
+      type: "bar",
+      data: {
+        labels: meses,
+        datasets: [
+          {
+            label: "Quiebres por mes",
+            data: quiebres,
+            backgroundColor: colorBarras,
+            borderRadius: 5,
+            maxBarThickness: 42
+          },
+          {
+            label: "Objetivo (≤ 3)",
+            type: "line",
+            data: [3, 3, 3, 3, 3, 3],
+            borderColor: p.muted,
+            borderDash: [6, 6],
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: p.muted, boxWidth: 14, font: { size: 11 } } }
+        },
+        scales: {
+          x: { ticks: { color: p.muted }, grid: { display: false } },
+          y: {
+            beginAtZero: true,
+            suggestedMax: 7,
+            ticks: { color: p.muted, stepSize: 1 },
+            grid: { color: p.grid }
+          }
+        }
+      }
+    }));
+  }
+
+  /* ---------- Tema ---------- */
+  function setTheme(theme, persist) {
+    root.setAttribute("data-theme", theme);
+    if (persist) {
+      try { localStorage.setItem("dashboard-theme", theme); } catch (e) { /* sin almacenamiento */ }
+    }
+    applyButton(theme);
+    buildCharts();
+  }
+
+  btn.addEventListener("click", function () {
+    var nuevo = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    setTheme(nuevo, true);
+  });
+
+  var guardado = null;
+  try { guardado = localStorage.getItem("dashboard-theme"); } catch (e) { /* sin almacenamiento */ }
+  setTheme(guardado === "light" ? "light" : "dark", false);
+  setNeedle();
+})();
+</script>
+</body>
+</html>
